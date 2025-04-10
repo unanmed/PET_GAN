@@ -8,7 +8,6 @@ import torch
 import numpy as np
 from datetime import datetime
 from torch.utils.data import DataLoader
-from torch.nn.parallel import DistributedDataParallel as DDP
 from torchvision import transforms
 from tqdm import tqdm
 from model.generator import PETUNet
@@ -186,7 +185,7 @@ def main(args):
                     output_img = gen(input)
                 output_img = output_img.cpu().numpy()
                 target = target.cpu().numpy()
-                for idx in range(BATCH_SIZE):
+                for idx in range(target.size(0)):
                     pred = output_img[idx]
                     tar = target[idx]
                     ssim, mse, nmse, me, rmse, mae = validate_loss(pred, tar)
