@@ -1,16 +1,16 @@
 import argparse
 import os, time
-import json
 import shutil
+import sys
 from pydicom import Dataset
 from scipy import io
 import torch
 import numpy as np
-import torch.distributed as dist
 from datetime import datetime
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torchvision import transforms
+from tqdm import tqdm
 from model.generator import PETUNet
 from model.critic import PETCritic
 from model.loss import WGANLoss, validate_loss
@@ -18,6 +18,8 @@ from model.loss import WGANLoss, validate_loss
 EPOCHS = 100
 IMAGE_SIZE = 256
 BATCH_SIZE = 8
+
+disable_tqdm = not sys.stdout.isatty()
 
 class TrainDataset(Dataset):
     def __init__(self, input, target):
@@ -119,7 +121,7 @@ def main(args):
     
     print(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Start to train")
 
-    for epoch in range(EPOCHS):
+    for epoch in tqdm(range(EPOCHS), leave=False, desc="WGAN Training", disable=disable_tqdm):
         gen.train()
         critic.train()
         
@@ -129,7 +131,7 @@ def main(args):
         gen_loss_total = torch.Tensor([0]).to(device)
         critic_loss_total = torch.Tensor([0]).to(device)
         
-        for sample_batched in dataloader:
+        for sample_batched in tqdm(dataloader, leave=False, desc="Epoch progress", disable=disable_tqdm):
             input = sample_batched['input_img'].to(device, non_blocking=True)
             target = sample_batched['target_img'].to(device, non_blocking=True)
             
@@ -161,7 +163,7 @@ def main(args):
         critic_loss_avg = critic_loss_total.item() / num_batches
         loss_all.append([dis_avg, gen_loss_avg, critic_loss_avg])
         
-        print(
+        tqdm.write(
             f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] " +
             f"Epoch: {epoch + 1} | time: {(time.time() - epoch_time):.2f} | " +
             f"W Loss: {dis_avg:.8f} | G Loss: {gen_loss_avg:.8f} | D Loss: {critic_loss_avg:.8f}"
@@ -195,13 +197,13 @@ def main(args):
                     rmse_total += rmse
                     mae_total += mae
 
-            print(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Validation info:")
-            print(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] SSIM: {(ssim_total / len(dataset)):.12f}")
-            print(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MSE: {(mse / len(dataset)):.12f}")
-            print(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] NMSE: {(nmse_total / len(dataset)):.12f}")
-            print(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ME: {(me_total / len(dataset)):.12f}")
-            print(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] RMSE: {(rmse_total / len(dataset)):.12f}")
-            print(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MAE: {(mae_total / len(dataset)):.12f}")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Validation info:")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] SSIM: {(ssim_total / len(dataset)):.12f}")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MSE: {(mse / len(dataset)):.12f}")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] NMSE: {(nmse_total / len(dataset)):.12f}")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ME: {(me_total / len(dataset)):.12f}")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] RMSE: {(rmse_total / len(dataset)):.12f}")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MAE: {(mae_total / len(dataset)):.12f}")
                 
             state = {
                 "gen_state": gen.state_dict(),
