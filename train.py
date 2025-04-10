@@ -101,6 +101,8 @@ def main(args):
     criterion = WGANLoss()
     optimizer_gen = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.0, 0.9))
     optimizer_critic = torch.optim.Adam(critic.parameters(), lr=1e-5, betas=(0.0, 0.9))
+    scheduler_gen = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_gen, T_max=EPOCHS)
+    scheduler_critic = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_critic, T_max=EPOCHS)
     
     # 初始化训练
     loss_all = []
@@ -165,8 +167,12 @@ def main(args):
         tqdm.write(
             f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] " +
             f"Epoch: {epoch + 1} | time: {(time.time() - epoch_time):.2f} | " +
-            f"W Loss: {dis_avg:.8f} | G Loss: {gen_loss_avg:.8f} | D Loss: {critic_loss_avg:.8f}"
+            f"W Loss: {dis_avg:.8f} | G Loss: {gen_loss_avg:.8f} | D Loss: {critic_loss_avg:.8f} | " +
+            f"G lr: {(optimizer_gen.param_groups[0]['lr']):.8f} | D lr: {(optimizer_critic.param_groups[0]['lr']):.8f}"
         )
+        
+        scheduler_gen.step()
+        scheduler_critic.step()
         
         if (epoch + 1) % 5 == 0:
             state = {
