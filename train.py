@@ -168,8 +168,8 @@ def main(args):
             f"W Loss: {dis_avg:.8f} | G Loss: {gen_loss_avg:.8f} | D Loss: {critic_loss_avg:.8f}"
         )
         
-        if (epoch + 1) % 10 == 0:
-            # 每十轮验证一次
+        if (epoch + 1) % 5 == 0:
+            # 每若干轮验证一次
             gen.eval()
             critic.eval()
             ssim_total = 0

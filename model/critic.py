@@ -16,11 +16,15 @@ class PETCritic(nn.Module):
             nn.LeakyReLU(0.2),
             
             spectral_norm(nn.Conv2d(base_ch*2, base_ch*4, 3, padding=1)), # 64*64
-            nn.MaxPool2d(4), # 16*16
-            nn.LeakyReLU(0.2)
+            nn.MaxPool2d(2), # 32*32
+            nn.LeakyReLU(0.2),
+            
+            spectral_norm(nn.Conv2d(base_ch*4, base_ch*8, 3, padding=1)), # 32*32
+            nn.MaxPool2d(2), # 16*16
+            nn.LeakyReLU(0.2),
         )
         self.fc = nn.Sequential(
-            nn.Linear(base_ch*4*16*16, 1)
+            spectral_norm(nn.Linear(base_ch*8*16*16, 1))
         )
         
     def forward(self, x):
