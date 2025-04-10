@@ -110,7 +110,7 @@ def main(args):
     c_steps = 5
     
     if args.resume:
-        checkpoint_path = f"{args.output}/checkpoint/latest.pth"
+        checkpoint_path = args.from_state
         data = torch.load(checkpoint_path, map_location=device)
         gen.load_state_dict(data["gen_state"])
         critic.load_state_dict(data["critic_state"])
@@ -157,9 +157,9 @@ def main(args):
                 
                 gen_loss_total += loss_g
             
-        dis_avg = dis_total.item() / num_batches
-        gen_loss_avg = gen_loss_total.item() / num_batches
-        critic_loss_avg = critic_loss_total.item() / num_batches
+        dis_avg = dis_total.item() / num_batches / c_steps
+        gen_loss_avg = gen_loss_total.item() / num_batches / g_steps
+        critic_loss_avg = critic_loss_total.item() / num_batches / c_steps
         loss_all.append([dis_avg, gen_loss_avg, critic_loss_avg])
         
         tqdm.write(
@@ -169,6 +169,16 @@ def main(args):
         )
         
         if (epoch + 1) % 5 == 0:
+            state = {
+                "gen_state": gen.state_dict(),
+                "gen_optim": optimizer_gen.state_dict(),
+                "critic_state": critic.state_dict(),
+                "critic_optim": optimizer_critic.state_dict()
+            }
+            path1 = os.path.join(args.output, f"checkpoint/{epoch + 1}.pth")
+            torch.save(state, path1)
+            shutil.copy2(path1, os.path.join(args.output, "checkpoint/latest.pth"))
+            
             # 每若干轮验证一次
             gen.eval()
             critic.eval()
@@ -183,11 +193,11 @@ def main(args):
                 target = batch['target_img'].to(device)
                 with torch.no_grad():
                     output_img = gen(input)
-                output_img = output_img.cpu().numpy()
-                target = target.cpu().numpy()
-                for idx in range(target.size(0)):
-                    pred = output_img[idx]
-                    tar = target[idx]
+                output_img: np.ndarray = output_img.cpu().numpy()
+                target: np.ndarray = target.cpu().numpy()
+                for idx in range(target.shape[0]):
+                    pred = output_img[idx].squeeze(0)
+                    tar = target[idx].squeeze(0)
                     ssim, mse, nmse, me, rmse, mae = validate_loss(pred, tar)
                     ssim_total += ssim
                     mse_total += mse
@@ -203,16 +213,6 @@ def main(args):
             tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ME: {(me_total / len(dataset)):.12f}")
             tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] RMSE: {(rmse_total / len(dataset)):.12f}")
             tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MAE: {(mae_total / len(dataset)):.12f}")
-                
-            state = {
-                "gen_state": gen.state_dict(),
-                "gen_optim": optimizer_gen.state_dict(),
-                "critic_state": critic.state_dict(),
-                "critic_optim": optimizer_critic.state_dict()
-            }
-            path1 = os.path.join(args.output, f"checkpoint/{epoch + 1}.pth")
-            torch.save(state, path1)
-            shutil.copy2(path1, os.path.join(args.output, "checkpoint/latest.pth"))
     
     state = {
         "gen_state": gen.state_dict(),

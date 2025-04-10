@@ -216,7 +216,7 @@ class PETUNet(nn.Module):
         x = self.up2(x, x3)
         x = self.up3(x, x2)
         x = self.up4(x, x1)
-        return self.out_conv(x)
+        return F.sigmoid(self.out_conv(x))
     
 class BiPathResidualBlock(nn.Module):
     def __init__(self, in_ch, out_ch, dilation=2):

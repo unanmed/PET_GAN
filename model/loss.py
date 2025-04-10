@@ -41,7 +41,7 @@ class WGANLoss:
         return -torch.mean(fake_scores)
     
 def validate_loss(input, target):
-    ssim_value = ssim(input, target, win_size=11, full=True, data_range=1)
+    ssim_value, _ = ssim(input, target, win_size=11, full=True, data_range=1)
     mse = np.mean((input.astype(np.float64) - target.astype(np.float64)) ** 2)
     nmse = mse / np.mean(input.astype(np.float64) ** 2) if np.mean(input.astype(np.float64) ** 2) != 0 else float('inf')
     me = np.mean(input.astype(np.float64) - target.astype(np.float64))
