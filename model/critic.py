@@ -7,7 +7,7 @@ class PETCritic(nn.Module):
     def __init__(self, base_ch=64):
         super().__init__()
         self.conv = nn.Sequential(
-            spectral_norm(nn.Conv2d(1, base_ch, 3, padding=1)), # 256*256
+            spectral_norm(nn.Conv2d(2, base_ch, 3, padding=1)), # 256*256
             nn.MaxPool2d(2), # 128*128
             nn.LeakyReLU(0.2),
             
@@ -27,7 +27,8 @@ class PETCritic(nn.Module):
             spectral_norm(nn.Linear(base_ch*8*16*16, 1))
         )
         
-    def forward(self, x):
+    def forward(self, x, origin):
+        x = torch.cat([x, origin], dim=1)
         x = self.conv(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)

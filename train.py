@@ -141,7 +141,7 @@ def main(args):
                 optimizer_critic.zero_grad()
                 fake_data = gen(input).detach()
                 
-                dis, loss_d = criterion.loss_critic(critic, target, fake_data)
+                dis, loss_d = criterion.loss_critic(critic, input, target, fake_data)
                 loss_d.backward()
                 optimizer_critic.step()
                 
@@ -153,7 +153,7 @@ def main(args):
                 optimizer_gen.zero_grad()
                 fake_data = gen(input)
                 
-                loss_g = criterion.loss_generator(critic, fake_data)
+                loss_g = criterion.loss_generator(critic, input, fake_data)
                 loss_g.backward()
                 optimizer_gen.step()
                 
