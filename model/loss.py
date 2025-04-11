@@ -3,10 +3,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
+from pytorch_msssim import ssim as ssim2
 
 class WGANLoss:
-    def __init__(self, lambda_gp=10):
+    def __init__(self, lambda_gp=10, weight=[0.5, 0.5]):
         self.lambda_gp = lambda_gp
+        # ssim, mse
+        self.weight = weight
         
     def compute_gradient_penalty(self, critic, origin, real, fake):
         epsilon = torch.rand(real.size(0), 1, 1, 1, device=real.device)
@@ -36,9 +39,18 @@ class WGANLoss:
         
         return d_loss, d_loss + gp_loss * self.lambda_gp
         
-    def loss_generator(self, critic, origin, fake):
+    def loss_generator(self, critic, origin, fake, target):
         fake_scores = critic(fake, origin)
-        return -torch.mean(fake_scores)
+        ssim_loss = 1 - ssim2(fake, target, data_range=1)
+        mse_loss = F.mse_loss(fake, target)
+        
+        losses = [
+            -torch.mean(fake_scores),
+            ssim_loss * self.weight[0],
+            mse_loss * self.weight[1]
+        ]
+        
+        return sum(losses)
     
 def validate_loss(fake, target):
     ssim_value, _ = ssim(fake, target, win_size=11, full=True, data_range=1)

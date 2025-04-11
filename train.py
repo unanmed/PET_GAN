@@ -99,10 +99,10 @@ def main(args):
 
     # 优化器和调度器
     criterion = WGANLoss()
-    optimizer_gen = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.0, 0.9))
+    optimizer_gen = torch.optim.Adam(gen.parameters(), lr=1e-5, betas=(0.0, 0.9))
     optimizer_critic = torch.optim.Adam(critic.parameters(), lr=1e-5, betas=(0.0, 0.9))
-    scheduler_gen = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_gen, T_max=EPOCHS)
-    scheduler_critic = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_critic, T_max=EPOCHS)
+    # scheduler_gen = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_gen, T_max=EPOCHS)
+    # scheduler_critic = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_critic, T_max=EPOCHS)
     
     # 初始化训练
     loss_all = []
@@ -153,7 +153,7 @@ def main(args):
                 optimizer_gen.zero_grad()
                 fake_data = gen(input)
                 
-                loss_g = criterion.loss_generator(critic, input, fake_data)
+                loss_g = criterion.loss_generator(critic, input, fake_data, target)
                 loss_g.backward()
                 optimizer_gen.step()
                 
@@ -166,13 +166,13 @@ def main(args):
         
         tqdm.write(
             f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] " +
-            f"Epoch: {epoch + 1} | time: {(time.time() - epoch_time):.2f} | " +
+            f"Epoch: {epoch + 1} | " +
             f"W Loss: {dis_avg:.8f} | G Loss: {gen_loss_avg:.8f} | D Loss: {critic_loss_avg:.8f} | " +
-            f"G lr: {(optimizer_gen.param_groups[0]['lr']):.8f} | D lr: {(optimizer_critic.param_groups[0]['lr']):.8f}"
+            f"G lr: {(optimizer_gen.param_groups[0]['lr']):.8f}"
         )
         
-        scheduler_gen.step()
-        scheduler_critic.step()
+        # scheduler_gen.step()
+        # scheduler_critic.step()
         
         if (epoch + 1) % 5 == 0:
             state = {
