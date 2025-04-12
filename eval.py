@@ -70,9 +70,6 @@ def eval(args):
         output_dcm = (output - output.min()) / (output.max() - output.min()) * 4000 - 1000  # 假设范围为-1000到3000
         output_dcm = output_dcm.astype(np.int16)  # 使用int16类型存储HU值
                 
-        # 保存为DICOM文件
-        dicom_output_path = os.path.join(output_folder, "predict_dcm", f"{os.path.splitext(file_name)[0]}.dcm")
-     
         # 处理 input_img 和 target_img 以匹配输出
         input_img = (input_img - input_img.min()) / (input_img.max() - input_img.min()) * 255
         input_img = input_img.astype(np.uint8)

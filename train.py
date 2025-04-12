@@ -16,7 +16,7 @@ from model.loss import WGANLoss, validate_loss
 
 EPOCHS = 100
 IMAGE_SIZE = 256
-BATCH_SIZE = 8
+BATCH_SIZE = 6
 
 disable_tqdm = not sys.stdout.isatty()
 
@@ -99,8 +99,8 @@ def main(args):
 
     # 优化器和调度器
     criterion = WGANLoss()
-    optimizer_gen = torch.optim.Adam(gen.parameters(), lr=1e-5, betas=(0.0, 0.9))
-    optimizer_critic = torch.optim.Adam(critic.parameters(), lr=1e-5, betas=(0.0, 0.9))
+    optimizer_gen = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.0, 0.9))
+    optimizer_critic = torch.optim.Adam(critic.parameters(), lr=1e-4, betas=(0.0, 0.9))
     # scheduler_gen = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_gen, T_max=EPOCHS)
     # scheduler_critic = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_critic, T_max=EPOCHS)
     
@@ -125,8 +125,6 @@ def main(args):
     for epoch in tqdm(range(EPOCHS), leave=False, desc="WGAN Training", disable=disable_tqdm):
         gen.train()
         critic.train()
-        
-        epoch_time = time.time()
         
         dis_total = torch.Tensor([0]).to(device)
         gen_loss_total = torch.Tensor([0]).to(device)
@@ -167,6 +165,7 @@ def main(args):
         tqdm.write(
             f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] " +
             f"Epoch: {epoch + 1} | " +
+            # 应该分别在 -2~2, -10~10, -10~10 范围内
             f"W Loss: {dis_avg:.8f} | G Loss: {gen_loss_avg:.8f} | D Loss: {critic_loss_avg:.8f} | " +
             f"G lr: {(optimizer_gen.param_groups[0]['lr']):.8f}"
         )
@@ -194,6 +193,7 @@ def main(args):
             me_total = 0
             rmse_total = 0
             mae_total = 0
+            n = 0
             for batch in dataloader_val:
                 input = batch['input_img'].to(device)
                 target = batch['target_img'].to(device)
@@ -211,14 +211,15 @@ def main(args):
                     me_total += me
                     rmse_total += rmse
                     mae_total += mae
+                    n += 1
 
             tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Validation info:")
-            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] SSIM: {(ssim_total / len(dataset)):.12f}")
-            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MSE: {(mse / len(dataset)):.12f}")
-            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] NMSE: {(nmse_total / len(dataset)):.12f}")
-            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ME: {(me_total / len(dataset)):.12f}")
-            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] RMSE: {(rmse_total / len(dataset)):.12f}")
-            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MAE: {(mae_total / len(dataset)):.12f}")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] SSIM: {(ssim_total / n):.12f}")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MSE: {(mse / n):.12f}")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] NMSE: {(nmse_total / n):.12f}")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ME: {(me_total / n):.12f}")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] RMSE: {(rmse_total / n):.12f}")
+            tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] MAE: {(mae_total / n):.12f}")
     
     state = {
         "gen_state": gen.state_dict(),

@@ -23,7 +23,7 @@ class ChannelAttention(nn.Module):
         return self.sigmoid(out) * x
 
 class SpatialAttention(nn.Module):
-    def __init__(self, kernel_size=7):
+    def __init__(self, kernel_size=5):
         super(SpatialAttention, self).__init__()
         self.conv = spectral_norm(nn.Conv2d(2, 1, kernel_size, padding=(kernel_size-1)//2, bias=False))
         self.sigmoid = nn.Sigmoid()
