@@ -20,12 +20,24 @@ BATCH_SIZE = 6
 
 disable_tqdm = not sys.stdout.isatty()
 
+def log_layer_gradients(model, prefix=""):
+    grad_log = {}
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            # 计算该参数梯度的L2范数
+            grad_norm = torch.linalg.vector_norm(param.grad, 2).item()
+            # 按层名记录（如"conv1.weight", "bn2.bias"）
+            grad_log[f"{prefix}{name}"] = grad_norm
+        else:
+            grad_log[f"{prefix}{name}"] = 0.0  # 标记无梯度
+    return grad_log
+
 class TrainDataset(Dataset):
     def __init__(self, input, target):
         self.transform = transforms.Compose([
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomVerticalFlip(p=0.5),
-            transforms.RandomRotation(10),
+            transforms.RandomRotation(30),
         ])
         
         imput_img = np.array([input +"/"+ x  for x in os.listdir(input)])
@@ -90,6 +102,7 @@ def main(args):
     # 载入数据
     dataset = TrainDataset(input=args.input, target=args.target)
     dataset_val = TrainDataset(input="../mat/NAC_test", target="../mat/CTAC_test")
+    dataset_val.transform = None
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
     dataloader_val = DataLoader(dataset_val, batch_size=BATCH_SIZE, shuffle=True)
 
@@ -145,6 +158,11 @@ def main(args):
                 
                 dis_total += dis
                 critic_loss_total += loss_d
+                
+            # gradients = log_layer_gradients(critic, prefix="critic/")
+            # print(gradients)
+            # total_norm = torch.linalg.vector_norm(torch.stack([torch.linalg.vector_norm(p.grad) for p in critic.parameters()]), 2)
+            # print("Critic 梯度范数:", total_norm.item())
             
             # Train generator
             for _ in range(g_steps):

@@ -6,7 +6,7 @@ from skimage.metrics import structural_similarity as ssim
 from pytorch_msssim import ssim as ssim2
 
 class WGANLoss:
-    def __init__(self, lambda_gp=50, weight=[0.5, 0.5]):
+    def __init__(self, lambda_gp=10, weight=[0.5, 0.5]):
         self.lambda_gp = lambda_gp
         # ssim, mse
         self.weight = weight
@@ -27,6 +27,8 @@ class WGANLoss:
         
         grad_norm = grad.view(real.size(0), -1).norm(2, dim=1)
         gp_loss = ((grad_norm - 1.0) ** 2).mean()
+        
+        # print("Gradient Norm:", grad_norm.mean().item())
         
         return gp_loss
         

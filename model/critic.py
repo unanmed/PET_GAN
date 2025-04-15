@@ -51,9 +51,11 @@ class InputHead(nn.Module):
         super().__init__()
         self.conv = nn.Sequential(
             spectral_norm(nn.Conv2d(1, base_ch, 3, padding=1)),
+            nn.GroupNorm(8, base_ch),
             nn.LeakyReLU(0.2),
             
-            spectral_norm(nn.Conv2d(base_ch, base_ch*2, 3, stride=2, padding=1)),
+            spectral_norm(nn.Conv2d(base_ch, base_ch, 3, stride=2, padding=1)),
+            nn.GroupNorm(8, base_ch),
             nn.LeakyReLU(0.2)
         )
         
@@ -66,22 +68,26 @@ class PETCritic(nn.Module):
         super().__init__()
         self.cond_conv = InputHead(base_ch)
         self.target_conv = InputHead(base_ch)
-        self.attention = CBAM(base_ch*4)
+        # self.attention = CBAM(base_ch*2)
         self.conv = nn.Sequential(
-            spectral_norm(nn.Conv2d(base_ch*4, base_ch*4, 3, padding=1)), # 128*128
+            spectral_norm(nn.Conv2d(base_ch*2, base_ch*4, 3, padding=1)), # 128*128
             nn.MaxPool2d(2), # 64*64
+            nn.GroupNorm(8, base_ch*4),
             nn.LeakyReLU(0.2),
             
             spectral_norm(nn.Conv2d(base_ch*4, base_ch*8, 3, padding=1)), # 64*64
             nn.MaxPool2d(2), # 32*32
+            nn.GroupNorm(8, base_ch*8),
             nn.LeakyReLU(0.2),
             
-            spectral_norm(nn.Conv2d(base_ch*8, base_ch*16, 3, padding=1)), # 32*32
+            spectral_norm(nn.Conv2d(base_ch*8, base_ch*1, 3, padding=1)), # 32*32
             nn.MaxPool2d(2), # 16*16
+            nn.GroupNorm(8, base_ch),
             nn.LeakyReLU(0.2),
             
-            spectral_norm(nn.Conv2d(base_ch*16, base_ch*1, 1)), # 16*16
-            nn.LeakyReLU(0.2)
+            # spectral_norm(nn.Conv2d(base_ch*16, base_ch*1, 1)), # 16*16
+            # nn.InstanceNorm2d(base_ch),
+            # nn.LeakyReLU(0.2)
         )
         self.fc = nn.Sequential(
             spectral_norm(nn.Linear(base_ch*16*16, 1))
@@ -91,7 +97,7 @@ class PETCritic(nn.Module):
         pred = self.cond_conv(pred)
         origin = self.target_conv(origin)
         x = torch.cat([pred, origin], dim=1)
-        x = self.attention(x)
+        # x = self.attention(x)
         x = self.conv(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
