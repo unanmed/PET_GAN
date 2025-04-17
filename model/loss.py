@@ -6,7 +6,7 @@ from skimage.metrics import structural_similarity as ssim
 from pytorch_msssim import ssim as ssim2
 
 class WGANLoss:
-    def __init__(self, lambda_gp=10, weight=[0.5, 0.5]):
+    def __init__(self, lambda_gp=20, weight=[2, 1, 10]):
         self.lambda_gp = lambda_gp
         # ssim, mse
         self.weight = weight
@@ -45,11 +45,13 @@ class WGANLoss:
         fake_scores = critic(fake, origin)
         ssim_loss = 1 - ssim2(fake, target, data_range=1)
         mse_loss = F.mse_loss(fake, target)
+        # range_loss = F.relu(fake - 1.0).mean() + F.relu(-fake).mean()
         
         losses = [
             -torch.mean(fake_scores),
             ssim_loss * self.weight[0],
-            mse_loss * self.weight[1]
+            mse_loss * self.weight[1],
+            # range_loss * self.weight[2]
         ]
         
         return sum(losses)

@@ -77,8 +77,8 @@ class TrainDataset(Dataset):
             target_img = self.transform(target_img)
         
         sample = {
-            'input_img': input_img,
-            'target_img': target_img,
+            'input_img': input_img * 2 - 1,
+            'target_img': target_img * 2 - 1,
         }
         return sample
 
@@ -114,8 +114,8 @@ def main(args):
     criterion = WGANLoss()
     optimizer_gen = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.0, 0.9))
     optimizer_critic = torch.optim.Adam(critic.parameters(), lr=1e-4, betas=(0.0, 0.9))
-    # scheduler_gen = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_gen, T_max=EPOCHS)
-    # scheduler_critic = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_critic, T_max=EPOCHS)
+    scheduler_gen = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_gen, T_max=EPOCHS)
+    scheduler_critic = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_critic, T_max=EPOCHS)
     
     # 初始化训练
     loss_all = []
@@ -131,6 +131,7 @@ def main(args):
         critic.load_state_dict(data["critic_state"])
         optimizer_gen.load_state_dict(data["gen_optim"])
         optimizer_critic.load_state_dict(data["critic_optim"])
+        del data
         print("Train from loaded state.")
     
     print(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Start to train")
@@ -183,13 +184,13 @@ def main(args):
         tqdm.write(
             f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] " +
             f"Epoch: {epoch + 1} | " +
-            # 应该分别在 -2~2, -10~10, -10~10 范围内
+            # 应该在 -10~10 范围内
             f"W Loss: {dis_avg:.8f} | G Loss: {gen_loss_avg:.8f} | D Loss: {critic_loss_avg:.8f} | " +
             f"G lr: {(optimizer_gen.param_groups[0]['lr']):.8f}"
         )
         
-        # scheduler_gen.step()
-        # scheduler_critic.step()
+        scheduler_gen.step()
+        scheduler_critic.step()
         
         if (epoch + 1) % 5 == 0:
             state = {
