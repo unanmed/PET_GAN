@@ -216,7 +216,7 @@ class PETUNet(nn.Module):
         x = self.up4(x, x1)
         
         x = self.out_conv(x)
-        return F.tanh(x)
+        return x
 
 # 检查显存占用
 if __name__ == "__main__":

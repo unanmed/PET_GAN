@@ -42,16 +42,17 @@ class WGANLoss:
         return d_loss, d_loss + gp_loss * self.lambda_gp
         
     def loss_generator(self, critic, origin, fake, target):
-        fake_scores = critic(fake, origin)
+        with torch.no_grad():
+            fake_scores = critic(fake, origin)
         ssim_loss = 1 - ssim2(fake, target, data_range=1)
         mse_loss = F.mse_loss(fake, target)
-        # range_loss = F.relu(fake - 1.0).mean() + F.relu(-fake).mean()
+        range_loss = F.relu(fake - 1.0).mean() + F.relu(-fake).mean()
         
         losses = [
             -torch.mean(fake_scores),
             ssim_loss * self.weight[0],
             mse_loss * self.weight[1],
-            # range_loss * self.weight[2]
+            range_loss * self.weight[2]
         ]
         
         return sum(losses)
