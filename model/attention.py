@@ -8,7 +8,7 @@ class SEBlock(nn.Module):
         self.fc = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),  # 全局平均池化
             nn.Conv2d(in_channels, in_channels // reduction, kernel_size=1),
-            nn.ReLU(inplace=True),
+            nn.GELU(inplace=True),
             nn.Conv2d(in_channels // reduction, in_channels, kernel_size=1),
             nn.Sigmoid()
         )
@@ -40,7 +40,7 @@ class ChannelAttention(nn.Module):
 
         self.fc = nn.Sequential(
             nn.Conv2d(in_channels, in_channels // reduction_ratio, 1, bias=False),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Conv2d(in_channels // reduction_ratio, in_channels, 1, bias=False)
         )
         self.sigmoid = nn.Sigmoid()

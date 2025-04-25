@@ -3,23 +3,20 @@ import os, time
 import shutil
 import sys
 import math
-from pydicom import Dataset
-from scipy import io
 import torch
 import numpy as np
 from datetime import datetime
 from torch.utils.data import DataLoader
-from torchvision import transforms
 from tqdm import tqdm
-from model.generator import PETUNet
-from model.feat import FeatExtractor
+from model.generator import PETModel
 from model.critic import PETCritic
 from model.loss import WGANLoss, validate_loss
+from dataset import TrainDataset, TrainDataset2
 
 EPOCHS = 100
 IMAGE_SIZE = 256
 IMAGE_COUNT = 164
-BATCH_SIZE = 4
+BATCH_SIZE = 3
 
 disable_tqdm = not sys.stdout.isatty()
 
@@ -34,53 +31,6 @@ def log_layer_gradients(model, prefix=""):
         else:
             grad_log[f"{prefix}{name}"] = 0.0  # 标记无梯度
     return grad_log
-
-class TrainDataset(Dataset):
-    def __init__(self, input, target):
-        self.transform = transforms.Compose([
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomVerticalFlip(p=0.5),
-            transforms.RandomRotation(30),
-        ])
-        
-        imput_img = np.array([input +"/"+ x  for x in os.listdir(input)])
-        target_img = np.array([target +"/"+ x  for x in os.listdir(target)])
-        
-        assert len(imput_img) == len(target_img)
-        
-        imput_img.sort()
-        target_img.sort()
-
-        self.data = {'input': imput_img, 'target': target_img}
-            
-    def np2tensor(self, array):
-        return torch.Tensor(array).permute(2,0,1)
-
-    def __len__(self):
-        return len(self.data['target'])
-
-    def __getitem__(self, idx):
-        input_path = self.data['input'][idx]
-        target_path = self.data['target'][idx]
-        
-        input_img = io.loadmat(input_path)['img_3d'].astype('float32')
-        target_img = io.loadmat(target_path)['img_3d'].astype('float32')
-        
-        input_img = torch.from_numpy(input_img).float().permute(2, 0, 1)
-        target_img = torch.from_numpy(target_img).float().permute(2, 0, 1)
-
-        if self.transform:  # 应用数据增强
-            seed = torch.randint(0, 2**32, (1,)).item()
-            torch.manual_seed(seed)
-            input_img = self.transform(input_img)
-            torch.manual_seed(seed)  # 保证input和target应用相同的变换
-            target_img = self.transform(target_img)
-        
-        sample = {
-            'input_img': input_img,
-            'target_img': target_img,
-        }
-        return sample
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="training codes")
@@ -100,30 +50,26 @@ def main(args):
     device = torch.device('cuda:1')
     
     # 载入数据
-    dataset = TrainDataset(input=args.input, target=args.target)
-    dataset_val = TrainDataset(input="../mat/NAC_test_WGAN", target="../mat/CTAC_test_WGAN")
+    dataset = TrainDataset2(input=args.input, target=args.target)
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+    dataset_val = TrainDataset2(input="../mat/NAC_test_WGAN", target="../mat/CTAC_test_WGAN")
+    dataloader_val = DataLoader(dataset_val, batch_size=BATCH_SIZE, shuffle=True)
     dataset_val.transform = None
-    # 这里 batch_size 设成 1
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
-    dataloader_val = DataLoader(dataset_val, batch_size=1, shuffle=True)
 
     # 定义模型
-    gen = PETUNet(in_ch=2).to(device)
-    extractor = FeatExtractor(img_count=IMAGE_COUNT).to(device)
+    gen = PETModel(img_count=IMAGE_COUNT).to(device)
     critic = PETCritic().to(device)
 
     # 优化器和调度器
     criterion = WGANLoss()
     optimizer_gen = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.0, 0.9))
-    optimizer_ext = torch.optim.Adam(extractor.parameters(), lr=1e-4, betas=(0.0, 0.9))
     optimizer_critic = torch.optim.Adam(critic.parameters(), lr=1e-4, betas=(0.0, 0.9))
     scheduler_gen = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_gen, T_max=EPOCHS)
-    scheduler_ext = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_ext, T_max=EPOCHS)
     scheduler_critic = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_critic, T_max=EPOCHS)
     
     # 初始化训练
     loss_all = []
-    num_batches = math.ceil(IMAGE_COUNT / BATCH_SIZE) * len(dataloader)
+    num_batches = math.ceil(IMAGE_COUNT / BATCH_SIZE) * len(dataset)
     
     g_steps = 1
     c_steps = 5
@@ -132,12 +78,12 @@ def main(args):
         checkpoint_path = args.from_state
         data = torch.load(checkpoint_path, map_location=device)
         gen.load_state_dict(data["gen_state"])
-        extractor.load_state_dict(data["ext_state"])
         critic.load_state_dict(data["critic_state"])
         optimizer_gen.load_state_dict(data["gen_optim"])
-        optimizer_ext.load_state_dict(data["ext_optim"])
         optimizer_critic.load_state_dict(data["critic_optim"])
         del data
+        scheduler_gen.last_epoch = 0
+        scheduler_critic.last_epoch = 0
         print("Train from loaded state.")
     
     print(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Start to train")
@@ -150,58 +96,46 @@ def main(args):
         gen_loss_total = torch.Tensor([0]).to(device)
         critic_loss_total = torch.Tensor([0]).to(device)
         
-        for sample_batched in tqdm(dataloader, leave=False, desc="Epoch progress", disable=disable_tqdm):
-            input = sample_batched['input_img'].to(device, non_blocking=True)
-            target = sample_batched['target_img'].to(device, non_blocking=True)
+        for data in tqdm(dataloader, leave=False, desc="Epoch progress", disable=disable_tqdm):
+            optimizer_critic.zero_grad()
+            optimizer_gen.zero_grad()
             
-            for i in tqdm(range(0, IMAGE_COUNT, BATCH_SIZE), leave=False, desc="Batch Progress", disable=disable_tqdm):
+            input_batch, target_batch, input = data
+            input_batch = input_batch.to(device)
+            target_batch = target_batch.to(device)
+            input = input.to(device)
+        
+            # Train critic
+            for _ in range(c_steps):
                 optimizer_critic.zero_grad()
                 optimizer_gen.zero_grad()
-                optimizer_ext.zero_grad()
+                with torch.no_grad():
+                    fake_data = gen(input_batch, input).detach()
                 
-                end_index = min(i + BATCH_SIZE, IMAGE_COUNT)
-                input_batch = input[0, i:end_index, :, :].unsqueeze(1)
-                target_batch = target[0, i:end_index, :, :].unsqueeze(1)
+                dis, loss_d = criterion.loss_critic(critic, input_batch, target_batch, fake_data)
+                loss_d.backward()
+                optimizer_critic.step()
                 
-                feat_img: torch.Tensor = extractor(input)
-                feat_img = feat_img.expand(end_index - i, -1, -1, -1)
-                input_data = torch.cat([input_batch, feat_img], dim=1)
+                dis_total += dis.detach()
+                critic_loss_total += loss_d.detach()
             
-                # Train critic
-                for _ in range(c_steps):
-                    optimizer_critic.zero_grad()
-                    with torch.no_grad():
-                        fake_data = gen(input_data).detach()
-                    
-                    dis, loss_d = criterion.loss_critic(critic, input_batch, target_batch, fake_data)
-                    loss_d.backward()
-                    optimizer_critic.step()
-                    
-                    dis_total += dis.detach()
-                    critic_loss_total += loss_d.detach()
-                
-                # gradients = log_layer_gradients(critic, prefix="critic/")
-                # print(gradients)
-                # total_norm = torch.linalg.vector_norm(torch.stack([torch.linalg.vector_norm(p.grad) for p in critic.parameters()]), 2)
-                # print("Critic 梯度范数:", total_norm.item())
+            # gradients = log_layer_gradients(critic, prefix="critic/")
+            # print(gradients)
+            # total_norm = torch.linalg.vector_norm(torch.stack([torch.linalg.vector_norm(p.grad) for p in critic.parameters()]), 2)
+            # print("Critic 梯度范数:", total_norm.item())
+            
+            # Train generator
+            for _ in range(g_steps):
                 optimizer_critic.zero_grad()
+                optimizer_gen.zero_grad()
                 
-                # Train generator
-                for _ in range(g_steps):
-                    optimizer_ext.zero_grad()
-                    optimizer_gen.zero_grad()
-                    
-                    feat_img: torch.Tensor = extractor(input)
-                    feat_img = feat_img.expand(BATCH_SIZE, -1, -1, -1)
-                    input_data = torch.cat([input_batch, feat_img], dim=1)
-                    fake_data = gen(input_data)
-                    
-                    loss_g = criterion.loss_generator(critic, input_batch, fake_data, target_batch)
-                    loss_g.backward()
-                    optimizer_gen.step()
-                    optimizer_ext.step()
-                    
-                    gen_loss_total += loss_g.detach()
+                fake_data = gen(input_batch, input)
+                
+                loss_g = criterion.loss_generator(critic, input_batch, fake_data, target_batch)
+                loss_g.backward()
+                optimizer_gen.step()
+                
+                gen_loss_total += loss_g.detach()
             
         dis_avg = dis_total.item() / num_batches / c_steps
         gen_loss_avg = gen_loss_total.item() / num_batches / g_steps
@@ -216,16 +150,13 @@ def main(args):
             f"G lr: {(optimizer_gen.param_groups[0]['lr']):.8f}"
         )
         
-        scheduler_gen.step()
-        scheduler_ext.step()
-        scheduler_critic.step()
+        scheduler_gen.step(epoch + 1)
+        scheduler_critic.step(epoch + 1)
         
         if (epoch + 1) % 5 == 0:
             state = {
                 "gen_state": gen.state_dict(),
                 "gen_optim": optimizer_gen.state_dict(),
-                "ext_state": extractor.state_dict(),
-                "ext_optim": optimizer_ext.state_dict(),
                 "critic_state": critic.state_dict(),
                 "critic_optim": optimizer_critic.state_dict()
             }
@@ -243,32 +174,26 @@ def main(args):
             rmse_total = 0
             mae_total = 0
             n = 0
-            for batch in dataloader_val:
-                input = batch['input_img'].to(device)
-                target = batch['target_img'].to(device)[0].unsqueeze(1)
-                output_img = torch.zeros_like(target)
+            for data in dataloader_val:
                 with torch.no_grad():
-                    feat = extractor(input)
-                    for i in range(0, IMAGE_COUNT, BATCH_SIZE):
-                        end_index = min(i + BATCH_SIZE, IMAGE_COUNT)
-                        input_batch = input[0, i:end_index, :, :].unsqueeze(1)
-                        feat_img = feat.expand(end_index - i, -1, -1, -1)
-                        input_data = torch.cat([feat_img, input_batch], dim=1)
-                        output = gen(input_data)
-                        output_img[i:end_index] = output
-                output_img: np.ndarray = output_img.cpu().numpy()
-                target: np.ndarray = target.cpu().numpy()
-                for idx in range(target.shape[0]):
-                    pred = output_img[idx].squeeze(0)
-                    tar = target[idx].squeeze(0)
-                    ssim, mse, nmse, me, rmse, mae = validate_loss(pred, tar)
-                    ssim_total += ssim
-                    mse_total += mse
-                    nmse_total += nmse
-                    me_total += me
-                    rmse_total += rmse
-                    mae_total += mae
-                    n += 1
+                    input_batch, target_batch, input = data
+                    input_batch = input_batch.to(device)
+                    target_batch = target_batch.to(device)
+                    input = input.to(device)
+                    output_img = gen(input_batch, input)
+                    output_img: np.ndarray = output_img.cpu().numpy()
+                    target: np.ndarray = target_batch.cpu().numpy()
+                    for idx in range(target.shape[0]):
+                        pred = output_img[idx].squeeze(0)
+                        tar = target[idx].squeeze(0)
+                        ssim, mse, nmse, me, rmse, mae = validate_loss(pred, tar)
+                        ssim_total += ssim
+                        mse_total += mse
+                        nmse_total += nmse
+                        me_total += me
+                        rmse_total += rmse
+                        mae_total += mae
+                        n += 1
 
             tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Validation info:")
             tqdm.write(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] SSIM: {(ssim_total / n):.12f}")
@@ -281,8 +206,6 @@ def main(args):
     state = {
         "gen_state": gen.state_dict(),
         "gen_optim": optimizer_gen.state_dict(),
-        "ext_state": extractor.state_dict(),
-        "ext_optim": optimizer_ext.state_dict(),
         "critic_state": critic.state_dict(),
         "critic_optim": optimizer_critic.state_dict()
     }
