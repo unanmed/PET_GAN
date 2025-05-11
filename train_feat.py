@@ -11,12 +11,12 @@ from tqdm import tqdm
 from model.generator import PETModel
 from model.critic import PETCritic
 from model.loss import WGANLoss, validate_loss
-from dataset import TrainDataset, TrainDataset2
+from dataset import TrainDataset2
 
 EPOCHS = 100
 IMAGE_SIZE = 256
 IMAGE_COUNT = 164
-BATCH_SIZE = 3
+BATCH_SIZE = 6
 
 disable_tqdm = not sys.stdout.isatty()
 
@@ -64,8 +64,8 @@ def main(args):
     criterion = WGANLoss()
     optimizer_gen = torch.optim.Adam(gen.parameters(), lr=1e-4, betas=(0.0, 0.9))
     optimizer_critic = torch.optim.Adam(critic.parameters(), lr=1e-4, betas=(0.0, 0.9))
-    scheduler_gen = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_gen, T_max=EPOCHS)
-    scheduler_critic = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_critic, T_max=EPOCHS)
+    scheduler_gen = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer_gen, T_0=EPOCHS)
+    scheduler_critic = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer_critic, T_0=EPOCHS)
     
     # 初始化训练
     loss_all = []
@@ -82,8 +82,6 @@ def main(args):
         optimizer_gen.load_state_dict(data["gen_optim"])
         optimizer_critic.load_state_dict(data["critic_optim"])
         del data
-        scheduler_gen.last_epoch = 0
-        scheduler_critic.last_epoch = 0
         print("Train from loaded state.")
     
     print(f"[INFO {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Start to train")
@@ -150,8 +148,11 @@ def main(args):
             f"G lr: {(optimizer_gen.param_groups[0]['lr']):.8f}"
         )
         
-        scheduler_gen.step(epoch + 1)
-        scheduler_critic.step(epoch + 1)
+        scheduler_gen.step()
+        scheduler_critic.step()
+        
+        optimizer_critic.zero_grad()
+        optimizer_gen.zero_grad()
         
         if (epoch + 1) % 5 == 0:
             state = {

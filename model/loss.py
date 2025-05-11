@@ -54,7 +54,7 @@ class WGANLoss:
             -torch.mean(fake_scores),
             ssim_loss * self.weight[0],
             mse_loss * self.weight[1],
-            torch.clamp(range_loss * self.weight[2], max=10.0)
+            # torch.clamp(range_loss * self.weight[2], max=10.0)
         ]
         
         return sum(losses)
