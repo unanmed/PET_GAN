@@ -11,13 +11,13 @@ class WGANLoss:
         # ssim, mse
         self.weight = weight
         
-    def compute_gradient_penalty(self, critic, origin, real, fake):
+    def compute_gradient_penalty(self, critic, origin, real, fake, glob):
         epsilon = torch.rand(real.size(0), 1, 1, 1, device=real.device)
         interp = epsilon * real + (1 - epsilon) * fake
         
         interp.requires_grad_()
         
-        interp_scores = critic(interp, origin)
+        interp_scores = critic(interp, origin, glob)
         
         grad = torch.autograd.grad(
             outputs=interp_scores, inputs=interp,
@@ -32,18 +32,18 @@ class WGANLoss:
         
         return gp_loss
         
-    def loss_critic(self, critic, origin, real, fake):
-        real_scores = critic(real, origin)
-        fake_scores = critic(fake, origin)
+    def loss_critic(self, critic, origin, real, fake, glob):
+        real_scores = critic(real, origin, glob)
+        fake_scores = critic(fake, origin, glob)
         
         d_loss = torch.mean(fake_scores) - torch.mean(real_scores)
-        gp_loss = self.compute_gradient_penalty(critic, origin, real, fake)
+        gp_loss = self.compute_gradient_penalty(critic, origin, real, fake, glob)
         
         return d_loss, d_loss + gp_loss * self.lambda_gp
         
-    def loss_generator(self, critic, origin, fake, target):
+    def loss_generator(self, critic, origin, fake, target, glob):
         with torch.no_grad():
-            fake_scores = critic(fake, origin)
+            fake_scores = critic(fake, origin, glob)
         ssim_loss = 1 - ssim2(fake, target, data_range=1)
         mse_loss = F.mse_loss(fake, target)
         range_loss = F.relu(fake - 1.0).sum() + F.relu(-fake).sum()

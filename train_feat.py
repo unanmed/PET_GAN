@@ -110,7 +110,7 @@ def main(args):
                 with torch.no_grad():
                     fake_data = gen(input_batch, input).detach()
                 
-                dis, loss_d = criterion.loss_critic(critic, input_batch, target_batch, fake_data)
+                dis, loss_d = criterion.loss_critic(critic, input_batch, target_batch, fake_data, input)
                 loss_d.backward()
                 optimizer_critic.step()
                 
@@ -129,7 +129,7 @@ def main(args):
                 
                 fake_data = gen(input_batch, input)
                 
-                loss_g = criterion.loss_generator(critic, input_batch, fake_data, target_batch)
+                loss_g = criterion.loss_generator(critic, input_batch, fake_data, target_batch, input)
                 loss_g.backward()
                 optimizer_gen.step()
                 

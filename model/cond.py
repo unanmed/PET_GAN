@@ -17,7 +17,7 @@ class ConditionEncoder(nn.Module):
             
             nn.MaxPool2d(4),
             nn.Conv2d(512, 512, 3, padding=1, padding_mode='replicate'), # 16x16
-            nn.InstanceNorm2d(1024),
+            nn.InstanceNorm2d(512),
             nn.GELU(),
             
             nn.MaxPool2d(4),
